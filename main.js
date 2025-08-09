@@ -1,8 +1,9 @@
-
 import { GRAVITY, GROUND_FRICTION, AIR_FRICTION, MOVE_SPEED, AIR_MOVE_SPEED, MAX_SPEED_X, JUMP_CHARGE_RATE, MAX_JUMP_CHARGE, JUMP_POWER, DOUBLE_JUMP_POWER } from './core/physics.js';
 import { createPlayer, updateCharge } from './entities/player.js';
 import { levels, LEVEL_HEIGHT_LIMIT } from './levels/levelData.js';
 import { updateHUD } from './ui/hud.js';
+import { world, stepWorld } from './core/planckWorld.js';
+const planck = window.planck;
 
 // --- SETUP ---
 const canvas = document.getElementById('game-canvas');
@@ -30,8 +31,8 @@ let idleAnimationTimer = 0;
 let currentLevel = 0;
 
 function resizeCanvas() {
-    width = container.clientWidth;
-    height = container.clientHeight;
+    width = container.clientWidth || 400;
+    height = container.clientHeight || 600;
     canvas.width = width;
     canvas.height = height;
 }
@@ -72,18 +73,19 @@ function createStars() {
 }
 
 function detonate(player) {
-    if (player.isOnPlatform) {
-        let power = 10 + player.charge * JUMP_POWER;
-        player.vy = -power;
-        player.isOnPlatform = false;
-        createExplosionEffect(player.x, player.y, player.coreColor);
-    } else if (player.airDetonations > 0) {
-        let power = 5 + player.charge * DOUBLE_JUMP_POWER;
-        player.vy = -power;
-        player.airDetonations--;
-        createExplosionEffect(player.x, player.y, player.airDetonationColor);
-    }
-    player.charge = 0;
+  const e = player.elyon;
+  if (e.isOnPlatform) {
+    let power = 10 + e.charge * JUMP_POWER;
+    player.setLinearVelocity(new planck.Vec2(player.getLinearVelocity().x, -power / 2));
+    e.isOnPlatform = false;
+    createExplosionEffect(e.x, e.y, e.coreColor);
+  } else if (e.airDetonations > 0) {
+    let power = 5 + e.charge * DOUBLE_JUMP_POWER;
+    player.setLinearVelocity(new planck.Vec2(player.getLinearVelocity().x, -power / 2));
+    e.airDetonations--;
+    createExplosionEffect(e.x, e.y, e.airDetonationColor);
+  }
+  e.charge = 0;
 }
 
 function createExplosionEffect(x, y, color) {
@@ -112,50 +114,82 @@ function createExplosionEffect(x, y, color) {
     });
 }
 
+// Crea un cuerpo estático de Planck.js para la plataforma y asocia datos de render
+function createPlatformBody(platform) {
+  const body = world.createBody({
+    type: 'static',
+    position: new planck.Vec2((platform.x + platform.width / 2) / 30, (platform.y + 10) / 30)
+  });
+  body.createFixture(planck.Box(platform.width / 2 / 30, 10 / 30));
+  // Guarda datos de render
+  body.renderData = {
+    width: platform.width,
+    height: 20,
+    color: platform.color || '#8e44ad'
+  };
+  return body;
+}
+
 function update() {
     if (isGameOver) return;
     idleAnimationTimer++;
 
-    const currentMoveSpeed = player.isOnPlatform ? MOVE_SPEED : AIR_MOVE_SPEED;
+    // --- INPUT & MOVIMIENTO HORIZONTAL ---
+    const e = player.elyon;
+    const vel = player.getLinearVelocity();
+    let vx = vel.x, vy = vel.y;
+    const currentMoveSpeed = e.isOnPlatform ? MOVE_SPEED : AIR_MOVE_SPEED;
     if (keys['ArrowLeft'] || keys['KeyA']) {
-        if (player.vx > -MAX_SPEED_X) player.vx -= currentMoveSpeed;
+        if (vx > -MAX_SPEED_X / 30) vx -= currentMoveSpeed / 30;
     }
     if (keys['ArrowRight'] || keys['KeyD']) {
-        if (player.vx < MAX_SPEED_X) player.vx += currentMoveSpeed;
+        if (vx < MAX_SPEED_X / 30) vx += currentMoveSpeed / 30;
+    }
+    // Limitar velocidad horizontal
+    if (vx < -MAX_SPEED_X / 30) vx = -MAX_SPEED_X / 30;
+    if (vx > MAX_SPEED_X / 30) vx = MAX_SPEED_X / 30;
+    player.setLinearVelocity(new planck.Vec2(vx, vy));
+
+    // Step de físicas
+    stepWorld(1/60);
+
+    // Sincronizar estado de Elyon para render
+    const pos = player.getPosition();
+    e.x = pos.x * 30;
+    e.y = pos.y * 30;
+    e.vx = player.getLinearVelocity().x * 30;
+    e.vy = player.getLinearVelocity().y * 30;
+
+    // Detección de contacto con plataformas usando Planck.js
+    let onPlatform = false;
+    for (let contact = player.getContactList(); contact; contact = contact.next) {
+      const other = contact.other;
+      if (window.platformBodies && window.platformBodies.includes(other)) {
+        // Solo cuenta si el contacto es por debajo (Elyon cayendo)
+        const normal = contact.contact.getManifold().localNormal;
+        if (normal && normal.y < 0) {
+          onPlatform = true;
+        }
+      }
+    }
+    const wasOnPlatform = e.isOnPlatform;
+    e.isOnPlatform = onPlatform;
+
+    // Efecto de partículas al aterrizar
+    if (!wasOnPlatform && e.isOnPlatform) {
+      createParticle(e.x, e.y + e.radius, '#00ffcc', 20);
     }
 
-    player.vx *= player.isOnPlatform ? GROUND_FRICTION : AIR_FRICTION;
-    player.x += player.vx;
-
-    player.vy += GRAVITY;
-    player.y += player.vy;
-    const wasOnPlatform = player.isOnPlatform;
-    player.isOnPlatform = false;
-
-    platforms.forEach(p => {
-        if (
-            player.vy > 0 &&
-            player.x + player.radius > p.x && player.x - player.radius < p.x + p.width &&
-            player.y + player.radius >= p.y && player.y + player.radius - player.vy < p.y + p.height
-        ) {
-            player.vy = 0;
-            player.y = p.y - player.radius;
-            player.isOnPlatform = true;
-            if (!wasOnPlatform) {
-                createParticle(player.x, player.y + player.radius, '#00ffcc', 20);
-            }
-        }
-    });
-
+    // --- POWER-UPS ---
     if (powerUps) {
         for (let i = powerUps.length - 1; i >= 0; i--) {
             const pu = powerUps[i];
-            const dx = player.x - pu.x;
-            const dy = player.y - pu.y;
+            const dx = e.x - pu.x;
+            const dy = e.y - pu.y;
             const dist = Math.sqrt(dx * dx + dy * dy);
-            if (dist < player.radius + pu.radius) {
+            if (dist < e.radius + pu.radius) {
                 if (pu.type === 'jump') {
-                    player.airDetonations++;
+                    e.airDetonations++;
                     createParticle(pu.x, pu.y, '#00ff66', 40);
                 }
                 powerUps.splice(i, 1);
@@ -163,7 +197,8 @@ function update() {
         }
     }
 
-    if (player.y <= LEVEL_HEIGHT_LIMIT) {
+    // --- LÍMITE DE NIVEL ---
+    if (e.y <= LEVEL_HEIGHT_LIMIT) {
         isGameOver = true;
         finalScoreElement.textContent = highestY;
         gameOverScreen.style.display = 'flex';
@@ -174,23 +209,26 @@ function update() {
 
     updateCharge(player);
 
-    if (player.x - player.radius < 0) {
-        player.x = player.radius;
-        player.vx = 0;
+    // --- BORDES DE LA PANTALLA ---
+    if (e.x - e.radius < 0) {
+        player.setPosition(new planck.Vec2(e.radius / 30, pos.y));
+        player.setLinearVelocity(new planck.Vec2(0, player.getLinearVelocity().y));
     }
-    if (player.x + player.radius > width) {
-        player.x = width - player.radius;
-        player.vx = 0;
+    if (e.x + e.radius > width) {
+        player.setPosition(new planck.Vec2((width - e.radius) / 30, pos.y));
+        player.setLinearVelocity(new planck.Vec2(0, player.getLinearVelocity().y));
     }
 
-    const targetCameraY = -player.y + height / 1.5;
+    // --- CÁMARA Y ALTURA ---
+    const targetCameraY = -e.y + height / 1.5;
     cameraY += (targetCameraY - cameraY) * 0.08;
 
-    const currentHeight = Math.max(0, Math.floor((basePlatformY - player.y) / 10));
+    const currentHeight = Math.max(0, Math.floor((basePlatformY - e.y) / 10));
     if (currentHeight > highestY) {
         highestY = currentHeight;
     }
 
+    // --- PARTÍCULAS Y TRAIL ---
     for (let i = particles.length - 1; i >= 0; i--) {
         const p = particles[i];
         if (p.isWave) {
@@ -209,8 +247,8 @@ function update() {
         }
     }
 
-    if (!player.isOnPlatform && player.vy < 0) {
-        trail.push({ x: player.x, y: player.y, radius: player.radius * 0.8, life: 25 });
+    if (!e.isOnPlatform && e.vy < 0) {
+        trail.push({ x: e.x, y: e.y, radius: e.radius * 0.8, life: 25 });
     }
     trail.forEach((t, index) => {
         t.life--;
@@ -218,7 +256,7 @@ function update() {
         if (t.life <= 0) trail.splice(index, 1);
     });
 
-    if (player.y - player.radius > height) {
+    if (e.y - e.radius > height) {
         isGameOver = true;
         finalScoreElement.textContent = highestY;
         gameOverScreen.style.display = 'flex';
@@ -229,62 +267,85 @@ function draw() {
     ctx.clearRect(0, 0, width, height);
     ctx.save();
     ctx.translate(0, cameraY);
-
     ctx.fillStyle = 'white';
-    stars.forEach(star => {
+    if (stars) {
+      stars.forEach(star => {
         ctx.beginPath();
         ctx.arc(star.x, star.y, star.radius, 0, Math.PI * 2);
         ctx.fill();
-    });
-
-    platforms.forEach(p => {
-        ctx.fillStyle = p.color;
-        ctx.fillRect(p.x, p.y, p.width, p.height);
-    });
-
-    if (obstacles) {
-        obstacles.forEach(o => {
-            ctx.save();
-            ctx.fillStyle = '#ff3333';
-            ctx.beginPath();
-            ctx.arc(o.x, o.y, o.radius, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.lineWidth = 2;
-            ctx.strokeStyle = '#fff';
-            ctx.stroke();
-            ctx.restore();
-        });
+      });
     }
-
+    // Dibuja plataformas según cuerpos físicos
+    if (platforms) {
+      platforms.forEach(body => {
+        const pos = body.getPosition();
+        const r = body.renderData;
+        ctx.fillStyle = r.color;
+        ctx.fillRect(
+          pos.x * 30 - r.width / 2,
+          pos.y * 30 - r.height / 2,
+          r.width,
+          r.height
+        );
+      });
+    }
+    // Dibuja power-ups
     if (powerUps) {
-        powerUps.forEach(pu => {
-            ctx.save();
-            ctx.beginPath();
-            ctx.arc(pu.x, pu.y, pu.radius + 4, 0, Math.PI * 2);
-            ctx.fillStyle = '#222';
-            ctx.fill();
-            ctx.beginPath();
-            ctx.arc(pu.x, pu.y, pu.radius, 0, Math.PI * 2);
-            ctx.fillStyle = pu.type === 'jump' ? '#00ff66' : '#00ffff';
-            ctx.shadowColor = '#fff';
-            ctx.shadowBlur = 18;
-            ctx.fill();
-            ctx.lineWidth = 3;
-            ctx.strokeStyle = '#fff';
-            ctx.stroke();
-            ctx.restore();
-        });
-    }
-
-    trail.forEach(t => {
-        ctx.globalAlpha = t.life / 25 * 0.5;
-        ctx.fillStyle = player.color;
+      powerUps.forEach(pu => {
+        ctx.save();
+        ctx.globalAlpha = 0.85;
         ctx.beginPath();
-        ctx.arc(t.x, t.y, t.radius, 0, Math.PI * 2);
+        ctx.arc(pu.x, pu.y, pu.radius, 0, Math.PI * 2);
+        ctx.fillStyle = pu.type === 'jump' ? '#00ff66' : '#ffcc00';
+        ctx.shadowColor = pu.type === 'jump' ? '#00ff66' : '#ffcc00';
+        ctx.shadowBlur = 12;
         ctx.fill();
-    });
-    ctx.globalAlpha = 1;
-
+        ctx.shadowBlur = 0;
+        ctx.restore();
+      });
+    }
+    // Dibuja Elyon según cuerpo físico
+    if (player && player.elyon) {
+      let drawY = player.elyon.y;
+      let coreSizeMultiplier = 1;
+      const chargeRatio = player.elyon.charge / MAX_JUMP_CHARGE;
+      if (player.elyon.isOnPlatform && !player.elyon.isCharging && !player.elyon.isChargingDouble) {
+        const idleLevitateAmplitude = 4;
+        const idleLevitateSpeed = 0.05;
+        const idlePulseAmplitude = 0.25;
+        const idlePulseSpeed = 0.08;
+        const levitationOffset = Math.sin(idleAnimationTimer * idleLevitateSpeed) * idleLevitateAmplitude;
+        drawY -= levitationOffset;
+        const pulse = (Math.sin(idleAnimationTimer * idlePulseSpeed) + 1) / 2;
+        coreSizeMultiplier = 1 + pulse * idlePulseAmplitude;
+      } else if (player.elyon.isCharging || player.elyon.isChargingDouble) {
+        coreSizeMultiplier = 1 + chargeRatio * 1.2;
+      }
+      const coreRadius = player.elyon.radius * 0.5 * coreSizeMultiplier;
+      ctx.fillStyle = player.elyon.color;
+      ctx.globalAlpha = 0.5;
+      ctx.beginPath();
+      ctx.arc(player.elyon.x, drawY, player.elyon.radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = 1;
+      let coreChargeColor;
+      if (player.elyon.isCharging) {
+        coreChargeColor = `rgb(${200 + 55 * chargeRatio}, ${255 * (1-chargeRatio)}, 255)`;
+      } else if (player.elyon.isChargingDouble) {
+        coreChargeColor = `rgb(0, 255, ${200 + 55 * chargeRatio})`;
+      } else {
+        coreChargeColor = player.elyon.coreColor;
+      }
+      ctx.fillStyle = coreChargeColor;
+      ctx.beginPath();
+      ctx.arc(player.elyon.x, drawY, coreRadius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowColor = coreChargeColor;
+      ctx.shadowBlur = (player.elyon.isCharging || player.elyon.isChargingDouble) ? 20 : 10 + (coreSizeMultiplier - 1) * 50;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    }
     particles.forEach(p => {
         if (p.isWave) {
             ctx.save();
@@ -315,53 +376,10 @@ function draw() {
         }
     });
 
-    let drawY = player.y;
-    let coreSizeMultiplier = 1;
-    const chargeRatio = player.charge / MAX_JUMP_CHARGE;
-
-    if (player.isOnPlatform && !player.isCharging && !player.isChargingDouble) {
-        const idleLevitateAmplitude = 4;
-        const idleLevitateSpeed = 0.05;
-        const idlePulseAmplitude = 0.25;
-        const idlePulseSpeed = 0.08;
-        const levitationOffset = Math.sin(idleAnimationTimer * idleLevitateSpeed) * idleLevitateAmplitude;
-        drawY -= levitationOffset;
-        const pulse = (Math.sin(idleAnimationTimer * idlePulseSpeed) + 1) / 2;
-        coreSizeMultiplier = 1 + pulse * idlePulseAmplitude;
-    } else if (player.isCharging || player.isChargingDouble) {
-        coreSizeMultiplier = 1 + chargeRatio * 1.2;
-    }
-
-    const coreRadius = player.radius * 0.5 * coreSizeMultiplier;
-    ctx.fillStyle = player.color;
-    ctx.globalAlpha = 0.5;
-    ctx.beginPath();
-    ctx.arc(player.x, drawY, player.radius, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.shadowBlur = 0;
-    ctx.globalAlpha = 1;
-
-    let coreChargeColor;
-    if (player.isCharging) {
-        coreChargeColor = `rgb(${200 + 55 * chargeRatio}, ${255 * (1-chargeRatio)}, 255)`;
-    } else if (player.isChargingDouble) {
-        coreChargeColor = `rgb(0, 255, ${200 + 55 * chargeRatio})`;
-    } else {
-        coreChargeColor = player.coreColor;
-    }
-
-    ctx.fillStyle = coreChargeColor;
-    ctx.beginPath();
-    ctx.arc(player.x, drawY, coreRadius, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.shadowColor = coreChargeColor;
-    ctx.shadowBlur = (player.isCharging || player.isChargingDouble) ? 20 : 10 + (coreSizeMultiplier - 1) * 50;
-    ctx.fill();
-    ctx.shadowBlur = 0;
-
     ctx.restore();
-
-    updateHUD(scoreElement, chargeIndicator, detonationsLeftElement, player, highestY, MAX_JUMP_CHARGE);
+    if (player && player.elyon) {
+      updateHUD(scoreElement, chargeIndicator, detonationsLeftElement, player.elyon, highestY, MAX_JUMP_CHARGE);
+    }
 }
 
 function animate() {
@@ -382,7 +400,12 @@ function resetGame() {
 
     const level = levels[currentLevel];
     player = createPlayer(level.platforms[0]);
-    platforms = level.platforms.map(p => createPlatform(p.x, p.y, p.width));
+    // Crea cuerpos físicos para plataformas
+    if (window.platformBodies) {
+      window.platformBodies.forEach(b => world.destroyBody(b));
+    }
+    window.platformBodies = level.platforms.map(p => createPlatformBody(p));
+    platforms = window.platformBodies; // Para render y lógica
     obstacles = level.obstacles ? level.obstacles.map(o => ({...o})) : [];
     powerUps = level.powerUps ? level.powerUps.map(pu => ({...pu})) : [];
     particles = [];
@@ -405,10 +428,10 @@ restartButton.addEventListener('click', () => {
 
 window.addEventListener('keydown', (e) => {
     if (e.code === 'Space' && !isGameOver) {
-        if (!player.isCharging) {
-            if (player.isOnPlatform || player.airDetonations > 0) {
-                player.isCharging = true;
-                player.charge = 0;
+        if (!player.elyon.isCharging) {
+            if (player.elyon.isOnPlatform || player.elyon.airDetonations > 0) {
+                player.elyon.isCharging = true;
+                player.elyon.charge = 0;
             }
         }
     } else {
@@ -418,8 +441,8 @@ window.addEventListener('keydown', (e) => {
 
 window.addEventListener('keyup', (e) => {
     if (e.code === 'Space' && !isGameOver) {
-        if (player.isCharging) {
-            player.isCharging = false;
+        if (player.elyon.isCharging) {
+            player.elyon.isCharging = false;
             detonate(player);
         }
     } else {
