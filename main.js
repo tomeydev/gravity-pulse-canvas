@@ -32,6 +32,26 @@ let platformBounce = 0;
 let platformBounceVelocity = 0;
 let platformBounceTarget = 0;
 let currentLevel = 0;
+const LEVEL_LIMIT_METERS = 900;
+const WORLD_BORDER_WIDTH = 12;
+  // Dibuja marco completo tipo nave espacial
+  ctx.save();
+  ctx.globalAlpha = 1;
+  ctx.shadowColor = '#00fff6';
+  ctx.shadowBlur = 32;
+  ctx.lineWidth = 14;
+  ctx.strokeStyle = '#00fff6';
+  ctx.beginPath();
+  ctx.roundRect(7, 7, width - 14, height - 14, 32);
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+  // Detalles internos del marco
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = '#1a1a2e';
+  ctx.beginPath();
+  ctx.roundRect(18, 18, width - 36, height - 36, 24);
+  ctx.stroke();
+  ctx.restore();
 
 function resizeCanvas() {
     width = container.clientWidth || 400;
@@ -218,24 +238,36 @@ function update() {
 
     updateCharge(player);
 
-    // --- BORDES DE LA PANTALLA ---
-    if (e.x - e.radius < 0) {
-        player.setPosition(new planck.Vec2(e.radius / 30, pos.y));
-        player.setLinearVelocity(new planck.Vec2(0, player.getLinearVelocity().y));
-    }
-    if (e.x + e.radius > width) {
-        player.setPosition(new planck.Vec2((width - e.radius) / 30, pos.y));
-        player.setLinearVelocity(new planck.Vec2(0, player.getLinearVelocity().y));
-    }
+  // --- COLISIÓN CON PAREDES DEL CONTENEDOR ---
+  const BORDER_OFFSET = 14; // Debe coincidir con el marco visual
+  if (e.x - e.radius < BORDER_OFFSET) {
+    // Rebote físico contra la pared izquierda
+    player.setPosition(new planck.Vec2((BORDER_OFFSET + e.radius) / 30, pos.y));
+    player.setLinearVelocity(new planck.Vec2(Math.abs(player.getLinearVelocity().x) * 0.5, player.getLinearVelocity().y * 0.7));
+    createParticle(e.x, e.y, '#00fff6', 8);
+  }
+  if (e.x + e.radius > width - BORDER_OFFSET) {
+    // Rebote físico contra la pared derecha
+    player.setPosition(new planck.Vec2((width - BORDER_OFFSET - e.radius) / 30, pos.y));
+    player.setLinearVelocity(new planck.Vec2(-Math.abs(player.getLinearVelocity().x) * 0.5, player.getLinearVelocity().y * 0.7));
+    createParticle(e.x, e.y, '#00fff6', 8);
+  }
 
-    // --- CÁMARA Y ALTURA ---
-    const targetCameraY = -e.y + height / 1.5;
-    cameraY += (targetCameraY - cameraY) * 0.08;
+  // --- CÁMARA Y ALTURA ---
+  const targetCameraY = -e.y + height / 1.5;
+  cameraY += (targetCameraY - cameraY) * 0.08;
 
-    const currentHeight = Math.max(0, Math.floor((basePlatformY - e.y) / 10));
-    if (currentHeight > highestY) {
-        highestY = currentHeight;
-    }
+  const currentHeight = Math.max(0, Math.floor((basePlatformY - e.y) / 10));
+  if (currentHeight > highestY) {
+    highestY = currentHeight;
+  }
+  // Límite de nivel
+  if (currentHeight >= LEVEL_LIMIT_METERS) {
+    isGameOver = true;
+    finalScoreElement.textContent = highestY;
+    gameOverScreen.style.display = 'flex';
+    // Aquí podrías mostrar mensaje de avance de nivel
+  }
 
     // --- PARTÍCULAS Y TRAIL ---
     for (let i = particles.length - 1; i >= 0; i--) {
@@ -274,6 +306,25 @@ function update() {
 
 function draw() {
     ctx.clearRect(0, 0, width, height);
+    // Dibuja marco visual tipo nave espacial
+    ctx.save();
+    ctx.globalAlpha = 1;
+    ctx.shadowColor = '#00fff6';
+    ctx.shadowBlur = 32;
+    ctx.lineWidth = 14;
+    ctx.strokeStyle = '#00fff6';
+    ctx.beginPath();
+    ctx.roundRect(7, 7, width - 14, height - 14, 32);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    // Detalles internos del marco
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = '#1a1a2e';
+    ctx.beginPath();
+    ctx.roundRect(18, 18, width - 36, height - 36, 24);
+    ctx.stroke();
+    ctx.restore();
+    // Continúa con el renderizado del juego
     ctx.save();
     ctx.translate(0, cameraY);
     ctx.fillStyle = 'white';
