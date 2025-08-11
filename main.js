@@ -75,12 +75,12 @@ function createStars() {
 function detonate(player) {
   const e = player.elyon;
   if (e.isOnPlatform) {
-    let power = 10 + e.charge * JUMP_POWER;
+    let power = 2 + Math.sqrt(e.charge) * JUMP_POWER;
     player.setLinearVelocity(new planck.Vec2(player.getLinearVelocity().x, -power / 2));
     e.isOnPlatform = false;
     createExplosionEffect(e.x, e.y, e.coreColor);
   } else if (e.airDetonations > 0) {
-    let power = 5 + e.charge * DOUBLE_JUMP_POWER;
+    let power = 1 + Math.sqrt(e.charge) * DOUBLE_JUMP_POWER;
     player.setLinearVelocity(new planck.Vec2(player.getLinearVelocity().x, -power / 2));
     e.airDetonations--;
     createExplosionEffect(e.x, e.y, e.airDetonationColor);
