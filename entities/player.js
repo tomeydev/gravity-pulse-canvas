@@ -26,6 +26,8 @@ export function createPlayer(basePlatform) {
     friction: 0.2,
     restitution: 0.0
   });
+  // Ajusta damping para simular inercia levitante
+  body.setLinearDamping(0.08);
   // Estado custom para gameplay
   body.elyon = {
     radius: 15,

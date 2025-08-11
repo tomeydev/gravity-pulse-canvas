@@ -1,4 +1,4 @@
-import { GRAVITY, GROUND_FRICTION, AIR_FRICTION, MOVE_SPEED, AIR_MOVE_SPEED, MAX_SPEED_X, JUMP_CHARGE_RATE, MAX_JUMP_CHARGE, JUMP_POWER, DOUBLE_JUMP_POWER } from './core/physics.js';
+import { GRAVITY, MOVE_SPEED, AIR_MOVE_SPEED, MAX_SPEED_X, MAX_JUMP_CHARGE, JUMP_POWER, DOUBLE_JUMP_POWER } from './core/physics.js';
 import { createPlayer, updateCharge } from './entities/player.js';
 import { levels, LEVEL_HEIGHT_LIMIT } from './levels/levelData.js';
 import { updateHUD } from './ui/hud.js';
@@ -195,16 +195,6 @@ function update() {
                 powerUps.splice(i, 1);
             }
         }
-    }
-
-    // --- LÍMITE DE NIVEL ---
-    if (e.y <= LEVEL_HEIGHT_LIMIT) {
-        isGameOver = true;
-        finalScoreElement.textContent = highestY;
-        gameOverScreen.style.display = 'flex';
-        gameOverScreen.querySelector('h2').textContent = '¡Nivel Superado!';
-        gameOverScreen.querySelector('p').innerHTML = `Altura máxima: <span id="final-score">${highestY}</span>m`;
-        return;
     }
 
     updateCharge(player);
