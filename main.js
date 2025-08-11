@@ -271,14 +271,15 @@ function draw() {
         ctx.fill();
       });
     }
-    // Dibuja plataformas según cuerpos físicos
+    // Dibuja plataformas centradas horizontalmente en el canvas
     if (platforms) {
       platforms.forEach(body => {
         const pos = body.getPosition();
         const r = body.renderData;
         ctx.fillStyle = r.color;
+        // Centrado horizontal absoluto
         ctx.fillRect(
-          pos.x * 30 - r.width / 2,
+          width / 2 - r.width / 2,
           pos.y * 30 - r.height / 2,
           r.width,
           r.height

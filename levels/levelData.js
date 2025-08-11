@@ -4,8 +4,8 @@
 export const LEVEL_HEIGHT_LIMIT = -1500;
 export const levels = [
   {
-    platforms: [
-      { x: 75, y: 550, width: 300 }
+      platforms: [
+        { x: 122, y: 550, width: 300 } // Centrada en canvas de 544px
     ],
     obstacles: [],
     powerUps: [
