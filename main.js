@@ -139,6 +139,12 @@ function update() {
     const vel = player.getLinearVelocity();
     let vx = vel.x, vy = vel.y;
     const currentMoveSpeed = e.isOnPlatform ? MOVE_SPEED : AIR_MOVE_SPEED;
+    // Ajuste dinámico de damping
+    if (e.isOnPlatform) {
+      player.setLinearDamping(0.08); // Inercia baja en plataforma
+    } else {
+      player.setLinearDamping(0.22); // Más fricción/inercia en el aire
+    }
     if (keys['ArrowLeft'] || keys['KeyA']) {
         if (vx > -MAX_SPEED_X / 30) vx -= currentMoveSpeed / 30;
     }
