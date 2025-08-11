@@ -28,6 +28,9 @@ let cameraY = 0;
 let highestY = 0;
 let isGameOver = false;
 let idleAnimationTimer = 0;
+let platformBounce = 0;
+let platformBounceVelocity = 0;
+let platformBounceTarget = 0;
 let currentLevel = 0;
 
 function resizeCanvas() {
@@ -181,10 +184,20 @@ function update() {
     const wasOnPlatform = e.isOnPlatform;
     e.isOnPlatform = onPlatform;
 
-    // Efecto de partículas al aterrizar
+    // Efecto de partículas y rebote al aterrizar
     if (!wasOnPlatform && e.isOnPlatform) {
       createParticle(e.x, e.y + e.radius, '#00ffcc', 20);
+      // Simula peso de Elyon al aterrizar
+      platformBounceTarget = 12; // desplazamiento hacia abajo
     }
+    // Rebote al detonar (solo si está en plataforma)
+    if (wasOnPlatform && !e.isOnPlatform && e.vy < 0) {
+      platformBounceTarget = -18; // desplazamiento hacia arriba
+    }
+    // Interpolación suave hacia el objetivo
+    platformBounce += (platformBounceTarget - platformBounce) * 0.18;
+    // Recupera la posición original lentamente
+    platformBounceTarget += (0 - platformBounceTarget) * 0.12;
 
     // --- POWER-UPS ---
     if (powerUps) {
@@ -271,19 +284,54 @@ function draw() {
         ctx.fill();
       });
     }
-    // Dibuja plataformas centradas horizontalmente en el canvas
+    // Dibuja plataforma energética centrada horizontalmente
     if (platforms) {
-      platforms.forEach(body => {
-        const pos = body.getPosition();
-        const r = body.renderData;
-        ctx.fillStyle = r.color;
-        // Centrado horizontal absoluto
-        ctx.fillRect(
-          width / 2 - r.width / 2,
-          pos.y * 30 - r.height / 2,
-          r.width,
-          r.height
-        );
+      platforms.forEach((body, idx) => {
+  const pos = body.getPosition();
+  const r = body.renderData;
+  const x = width / 2 - r.width / 2;
+  const y = pos.y * 30 - r.height / 2;
+  let bounceY = y;
+  if (idx === 0) bounceY += platformBounce;
+        // Fondo oscuro
+        ctx.save();
+  ctx.beginPath();
+  ctx.roundRect(x, bounceY, r.width, r.height, 12);
+  const grad = ctx.createLinearGradient(x, bounceY, x + r.width, bounceY + r.height);
+        grad.addColorStop(0, '#222a44');
+        grad.addColorStop(0.5, '#2b2b4a');
+        grad.addColorStop(1, '#222a44');
+        ctx.fillStyle = grad;
+        ctx.fill();
+        // Líneas de energía animadas a lo largo de la plataforma, sin sobresalir del borde derecho
+        const numLines = 8;
+        const lineLength = 16;
+        for (let i = 0; i < numLines; i++) {
+          ctx.save();
+          ctx.globalAlpha = 0.45 + 0.45 * Math.sin(idleAnimationTimer * 0.18 + i * 0.7);
+          ctx.strokeStyle = '#00ffcc';
+          ctx.lineWidth = 2.2;
+          ctx.beginPath();
+          // Calcula la posición inicial para que la última línea no sobresalga
+          const margin = 10;
+          const availableWidth = r.width - 2 * margin - lineLength;
+          const startX = x + margin + i * (availableWidth / (numLines - 1));
+          ctx.moveTo(startX, bounceY + 6);
+          ctx.lineTo(startX + lineLength, bounceY + r.height - 6);
+          ctx.stroke();
+          ctx.restore();
+        }
+        // Borde animado con destellos
+        ctx.save();
+        ctx.shadowColor = '#00fff6';
+  ctx.shadowBlur = 18 + 8 * Math.sin(idleAnimationTimer * 0.18);
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = '#00fff6';
+  ctx.beginPath();
+  ctx.roundRect(x, bounceY, r.width, r.height, 12);
+  ctx.stroke();
+  ctx.restore();
+  ctx.restore();
       });
     }
     // Dibuja power-ups
