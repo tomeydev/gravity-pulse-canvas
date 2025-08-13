@@ -1,6 +1,6 @@
 import { GRAVITY, MOVE_SPEED, AIR_MOVE_SPEED, MAX_SPEED_X, MAX_JUMP_CHARGE, JUMP_POWER, DOUBLE_JUMP_POWER } from './core/physics.js';
 import { createPlayer, updateCharge } from './entities/player.js';
-import { levels, LEVEL_HEIGHT_LIMIT } from './levels/levelData.js';
+import { levels } from './levels/levelData.js';
 import { updateHUD } from './ui/hud.js';
 import { world, stepWorld } from './core/planckWorld.js';
 const planck = window.planck;
@@ -32,7 +32,7 @@ let platformBounce = 0;
 let platformBounceVelocity = 0;
 let platformBounceTarget = 0;
 let currentLevel = 0;
-const LEVEL_LIMIT_METERS = 900;
+const LEVEL_LIMIT_METERS = 600;
 const WORLD_BORDER_WIDTH = 12;
   // Dibuja marco completo tipo nave espacial
   ctx.save();
@@ -138,16 +138,28 @@ function createExplosionEffect(x, y, color) {
 }
 
 // Crea un cuerpo estático de Planck.js para la plataforma y asocia datos de render
+/**
+ * Crea un cuerpo estático de Planck.js para la plataforma, alineado exactamente con la visualización canvas.
+ * El centro físico coincide con el centro visual de la plataforma.
+ */
 function createPlatformBody(platform) {
+  // Centro de la plataforma en píxeles
+  const centerX = platform.x + platform.width / 2;
+  const centerY = platform.y + platform.height / 2;
+  // Convertir a metros
+  const posX = centerX / 30;
+  const posY = centerY / 30;
+  const halfWidth = platform.width / 2 / 30;
+  const halfHeight = platform.height / 2 / 30;
   const body = world.createBody({
     type: 'static',
-    position: new planck.Vec2((platform.x + platform.width / 2) / 30, (platform.y + 10) / 30)
+    position: new planck.Vec2(posX, posY)
   });
-  body.createFixture(planck.Box(platform.width / 2 / 30, 10 / 30));
+  body.createFixture(planck.Box(halfWidth, halfHeight));
   // Guarda datos de render
   body.renderData = {
     width: platform.width,
-    height: 20,
+    height: platform.height,
     color: platform.color || '#8e44ad'
   };
   return body;
@@ -337,10 +349,11 @@ function draw() {
     }
     // Dibuja plataforma energética centrada horizontalmente
     if (platforms) {
-      platforms.forEach((body, idx) => {
+    platforms.forEach((body, idx) => {
   const pos = body.getPosition();
   const r = body.renderData;
-  const x = width / 2 - r.width / 2;
+  // Render en la posición física real del cuerpo
+  const x = pos.x * 30 - r.width / 2;
   const y = pos.y * 30 - r.height / 2;
   let bounceY = y;
   if (idx === 0) bounceY += platformBounce;

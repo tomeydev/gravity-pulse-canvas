@@ -1,17 +1,29 @@
 // levels/levelData.js
 // Layout modular de niveles para Gravity Pulse
 
-export const LEVEL_HEIGHT_LIMIT = -1500;
+/**
+ * Platform layout based on GDD (Notion):
+ * - Spacing increases with height (progressive difficulty)
+ * - Alternating X positions for variety
+ * - Y in pixels (negative = higher)
+ * - BASE at y=0, top at y=-1600px (example)
+ * - Conversion: 1m ≈ 9.5px (empirical, see core/physics.js)
+ */
 export const levels = [
   {
-      platforms: [
-        { x: 122, y: 550, width: 300 } // Centrada en canvas de 544px
+    platforms: [
+      { x: 200, y: 0, width: 300, height: 20 },      // Base
+      { x: 320, y: -240, width: 120, height: 20 },   // Easy jump
+      { x: 120, y: -520, width: 100, height: 20 },   // Medium jump
+      { x: 260, y: -840, width: 80, height: 20 },    // Medium-high
+      { x: 180, y: -1200, width: 70, height: 20 },   // Harder
+      { x: 340, y: -1600, width: 50, height: 20 }    // Top platform (goal)
     ],
     obstacles: [],
     powerUps: [
-      { x: 200, y: 250, radius: 12, type: 'jump' },
-      { x: 120, y: 100, radius: 12, type: 'jump' },
-      { x: 320, y: -80, radius: 12, type: 'jump' },
+      { x: 200, y: -350, radius: 12, type: 'jump' },
+      { x: 120, y: -100, radius: 12, type: 'jump' },
+      { x: 320, y: -30, radius: 12, type: 'jump' },
       { x: 180, y: -250, radius: 12, type: 'jump' },
       { x: 80, y: -400, radius: 12, type: 'jump' },
       { x: 300, y: -600, radius: 12, type: 'jump' },
